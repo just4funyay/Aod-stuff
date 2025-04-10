@@ -35,11 +35,9 @@ class InputDatabase(APIView):
         processed_files = []
         errors = []
 
-        # Pastikan ada satelit sebelum menyimpan data raster
-        sattellite_name = "VIIRS"  # Ganti sesuai kebutuhan
+        
+        sattellite_name = "VIIRS" 
         sattellite, _ = Sattellite.objects.get_or_create(sattelite_name=sattellite_name)
-
-        # Iterasi semua file .nc dalam folder
         for nc_file_name in os.listdir(nc_folder_path):
             if nc_file_name.endswith('.nc'):
                 nc_file_path = os.path.join(nc_folder_path, nc_file_name)
@@ -52,7 +50,7 @@ class InputDatabase(APIView):
                     for i in range(latitude.shape[0]):  
                         for j in range(latitude.shape[1]):  
                             dataraster.append({
-                                "latitude": float(latitude[i, j]),   # Mengakses elemen (i, j)
+                                "latitude": float(latitude[i, j]),  
                                 "longitude": float(longitude[i, j]),
                                 "aod_values": float(aod_values[i, j])
                             })
@@ -69,7 +67,7 @@ class InputDatabase(APIView):
 
                     gc.collect()
 
-                    # Hapus file setelah diproses
+                    # Hapus file setelah diproses TIFF
                     if os.path.exists(geotiff_file_path):
                         os.remove(geotiff_file_path)
                         print(f"File {geotiff_file_path} berhasil dihapus.")
@@ -108,7 +106,6 @@ class GetRasterDataView(APIView):
             ) as dst:
                 dst.write(gdal_raster.bands[0].data(), 1)
 
-            # Kembalikan file sebagai response download
             file_buffer.seek(0)
             response = HttpResponse(file_buffer, content_type='image/tiff')
             response['Content-Disposition'] = 'attachment; filename="raster_latest.tif"'

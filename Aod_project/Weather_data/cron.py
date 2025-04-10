@@ -1,8 +1,8 @@
 import requests
 
 def fetch_weather_data():
-    """Fungsi ini akan memanggil endpoint API weather"""
-    url = "http://127.0.0.1:8000/api2/weather/fetch/"  # URL API kamu
+    
+    url = "http://127.0.0.1:8000/api2/weather/fetch/"
     try:
         response = requests.get(url)
 

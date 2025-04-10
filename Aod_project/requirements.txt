@@ -1,0 +1,9 @@
+Django==5.1.6
+djangorestframework==3.15.2
+djangorestframework_gis==1.1
+earthaccess==0.14.0
+numpy==2.2.4
+psycopg2_binary==2.9.10
+rasterio==1.4.3
+Requests==2.32.3
+xarray==2025.1.2
