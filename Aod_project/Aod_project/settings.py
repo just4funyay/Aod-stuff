@@ -86,9 +86,9 @@ DATABASES = {
         'ENGINE': 'django.contrib.gis.db.backends.postgis',
         'NAME': 'aodproject',
         'USER': 'aoduser',
-        'PASSWORD': 'mandaika',
-        'HOST': 'localhost',
-        'PORT': '',
+        'PASSWORD': 'tioninta',
+        'HOST': '127.0.0.1',
+        'PORT': '5432',
     }
 }
 
@@ -144,8 +144,9 @@ REST_FRAMEWORK = {
 
 
 CRONJOBS = [
-    ('0 */3 * * *', 'Aod_data.retrieve_aod.retrieve_viirs_data'),
-    ('0 */6 * * *', 'Weather_data.cron.fetch_weather_data')
+    ('* * * * *', 'Aod_data.retrieve_aod.retrieve_viirs_data'),
+    #('* * * * *', 'Weather_data.cron.fetch_weather_data'),
+    ('* * * * *', 'Aod_data.get-data-himawari.getDataHimawari'),
 ]
 
 import os
