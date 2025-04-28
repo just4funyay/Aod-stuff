@@ -11,7 +11,7 @@ def retrieve_viirs_data():
     yesterday = yesterday.strftime("%Y-%m-%d")
 
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    folder_name = 'aod-file'
+    folder_name = 'aod-file/VIIRS'
     download_path = os.path.join(base_dir, folder_name)
     if not os.path.exists(download_path):
         os.makedirs(download_path)

@@ -35,6 +35,10 @@ def getDataHimawari():
     except Exception as e:
         print(f"Gagal mengakses {dirData}: {e}")
     ftp.quit()
+    print(local_file_path)
+
+
+
 
 
 

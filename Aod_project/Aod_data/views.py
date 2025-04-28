@@ -20,11 +20,11 @@ from .serializers import RasterDataSerializer
 class InputDatabase(APIView):
     def get(self, request):
         today = date.today()
-        nc_folder_path = os.path.join(settings.BASE_DIR, 'Aod_data/aod-file')
+        base_nc_folder_path = os.path.join(settings.BASE_DIR, 'Aod_data/aod-file')
 
-        if not os.path.exists(nc_folder_path):
+        if not os.path.exists(base_nc_folder_path):
             return Response(
-                {"error": f"Folder {nc_folder_path} tidak ditemukan."},
+                {"error": f"Folder {base_nc_folder_path} tidak ditemukan."},
                 status=status.HTTP_404_NOT_FOUND
             )
 
@@ -35,46 +35,116 @@ class InputDatabase(APIView):
         processed_files = []
         errors = []
 
-        
-        sattellite_name = "VIIRS" 
-        sattellite, _ = Sattellite.objects.get_or_create(sattelite_name=sattellite_name)
-        for nc_file_name in os.listdir(nc_folder_path):
-            if nc_file_name.endswith('.nc'):
-                nc_file_path = os.path.join(nc_folder_path, nc_file_name)
-                geotiff_file_path = os.path.join(geotiff_folder, nc_file_name.replace('.nc', '.tif'))
+        # Pisahkan pemrosesan untuk VIIRS
+        for satellite_folder_name in os.listdir(base_nc_folder_path):
+            satellite_folder_path = os.path.join(base_nc_folder_path, satellite_folder_name)
 
-                try:
-                    latitude, longitude, aod_values = convert_to_geoTiFF_input_data(nc_file_path, geotiff_file_path)
-                    dataraster = []
+            if not os.path.isdir(satellite_folder_path):
+                continue  # Skip kalau bukan folder
 
-                    for i in range(latitude.shape[0]):  
-                        for j in range(latitude.shape[1]):  
-                            dataraster.append({
-                                "latitude": float(latitude[i, j]),  
-                                "longitude": float(longitude[i, j]),
-                                "aod_values": float(aod_values[i, j])
-                            })
+            try:
+                sattellite, _ = Sattellite.objects.get_or_create(sattelite_name=satellite_folder_name)
 
-                    raster = GDALRaster(geotiff_file_path, write=True)
-                    raster_data = RasterData(
-                        sattellite=sattellite,  
-                        raster=raster,
-                        data=dataraster,
-                        time_retrieve=today
-                    )
-                    raster_data.save()
-                    raster = None
+                # Hanya untuk VIIRS
+                if "VIIRS" in satellite_folder_name:
+                    for nc_file_name in os.listdir(satellite_folder_path):
+                        if nc_file_name.endswith('.nc'):
+                            nc_file_path = os.path.join(satellite_folder_path, nc_file_name)
+                            geotiff_file_path = os.path.join(geotiff_folder, f"{satellite_folder_name}_{nc_file_name.replace('.nc', '.tif')}")
 
-                    gc.collect()
+                            try:
+                                latitude, longitude, aod_values = convert_to_geoTiFF_input_data(nc_file_path, geotiff_file_path)
+                                print(f"Longitude shape (VIIRS): {longitude.shape}")
+                                print(f"Latitude shape (VIIRS): {latitude.shape}")
+                                
+                                dataraster = []
 
-                    # Hapus file setelah diproses TIFF
-                    if os.path.exists(geotiff_file_path):
-                        os.remove(geotiff_file_path)
-                        print(f"File {geotiff_file_path} berhasil dihapus.")
+                                # Proses data VIIRS
+                                for i in range(latitude.shape[0]):
+                                    for j in range(longitude.shape[1]):  # Memperbaiki akses dimensi longitude
+                                        # Mengambil elemen tunggal dari array untuk latitude, longitude, dan aod_values
+                                        lat_value = float(latitude[i, j]) if latitude.ndim == 2 else float(latitude[i])
+                                        lon_value = float(longitude[i, j]) if longitude.ndim == 2 else float(longitude[i])
+                                        aod_value = float(aod_values[i, j]) if aod_values.ndim == 2 else float(aod_values[i])
 
-                    processed_files.append(nc_file_name)
-                except Exception as e:
-                    errors.append({nc_file_name: str(e)})
+                                        dataraster.append({
+                                            "latitude": lat_value,
+                                            "longitude": lon_value,
+                                            "aod_values": aod_value
+                                        })
+
+                                raster = GDALRaster(geotiff_file_path, write=True)
+                                raster_data = RasterData(
+                                    sattellite=sattellite,
+                                    raster=raster,
+                                    data=dataraster,
+                                    time_retrieve=today
+                                )
+                                raster_data.save()
+                                raster = None
+
+                                gc.collect()
+
+                                if os.path.exists(geotiff_file_path):
+                                    os.remove(geotiff_file_path)
+                                    print(f"File {geotiff_file_path} berhasil dihapus.")
+
+                                processed_files.append(f"{satellite_folder_name}/{nc_file_name}")
+
+                            except Exception as e:
+                                errors.append({f"{satellite_folder_name}/{nc_file_name}": str(e)})
+
+                # Pemrosesan untuk Himawari
+                elif "Himawari" in satellite_folder_name:
+                    for nc_file_name in os.listdir(satellite_folder_path):
+                        if nc_file_name.endswith('.nc'):
+                            nc_file_path = os.path.join(satellite_folder_path, nc_file_name)
+                            geotiff_file_path = os.path.join(geotiff_folder, f"{satellite_folder_name}_{nc_file_name.replace('.nc', '.tif')}")
+
+                            try:
+                                latitude, longitude, aod_values = convert_to_geoTiFF_input_data(nc_file_path, geotiff_file_path)
+                                print(f"Longitude shape (Himawari): {longitude.shape}")
+                                print(f"Latitude shape (Himawari): {latitude.shape}")
+
+                                dataraster = []
+
+                                # Proses data Himawari
+                                for i in range(latitude.shape[0]):
+                                    for j in range(longitude.shape[0]):  # Memperbaiki akses dimensi longitude
+                                        # Mengambil elemen tunggal dari array untuk latitude, longitude, dan aod_values
+                                        lat_value = float(latitude[i, j]) if latitude.ndim == 2 else float(latitude[i])
+                                        lon_value = float(longitude[i, j]) if longitude.ndim == 2 else float(longitude[i])
+                                        aod_value = float(aod_values[i, j]) if aod_values.ndim == 2 else float(aod_values[i])
+
+                                        dataraster.append({
+                                            "latitude": lat_value,
+                                            "longitude": lon_value,
+                                            "aod_values": aod_value
+                                        })
+
+                                raster = GDALRaster(geotiff_file_path, write=True)
+                                raster_data = RasterData(
+                                    sattellite=sattellite,
+                                    raster=raster,
+                                    data=dataraster,
+                                    time_retrieve=today
+                                )
+                                raster_data.save()
+                                raster = None
+
+                                gc.collect()
+
+                                if os.path.exists(geotiff_file_path):
+                                    os.remove(geotiff_file_path)
+                                    print(f"File {geotiff_file_path} berhasil dihapus.")
+
+                                processed_files.append(f"{satellite_folder_name}/{nc_file_name}")
+
+                            except Exception as e:
+                                errors.append({f"{satellite_folder_name}/{nc_file_name}": str(e)})
+
+            except Exception as e:
+                errors.append({satellite_folder_name: str(e)})
 
         return Response(
             {
