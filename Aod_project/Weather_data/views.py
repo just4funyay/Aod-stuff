@@ -4,8 +4,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
 from django.contrib.gis.geos import Point
-from .models import WeatherData
-from .serializers import WeatherDataSerializer
+from .models import WeatherData,WeatherStation,pm25DataActual,pm25DataPrediction
+from .serializers import WeatherDataSerializer,pm25DataActualSerializer,pm25DataPredictionSerializer
 
 
 API_KEY = "KTJ63YA3XS9PHPBWTWHKAR5D8"
@@ -22,61 +22,62 @@ lokasi = {
     'kebun_jeruk': (-6.20737, 106.7525)
 }
 
-class WeatherView(APIView):
+class WeatherFetchView(APIView):
     def get(self, request):
         results = []
-        for nama, (lat, lon) in lokasi.items():
-            api_url = f"{BASE_URL}{lat},{lon}?unitGroup=metric&key={API_KEY}&include=current"
+        stations = WeatherStation.objects.all()
 
-            response = requests.get(api_url)
+        for station in stations:
+            lat = station.location.y
+            lon = station.location.x
+            name = station.name
+
+            url = f"{BASE_URL}{lat},{lon}?unitGroup=metric&key={API_KEY}&include=current"
+            response = requests.get(url)
+
             if response.status_code == 200:
                 data = response.json()
-                current_data = data.get('currentConditions', {})
+                current = data.get('currentConditions', {})
+                date_str = data.get('days', [{}])[0].get('datetime')  # Format: '2024-05-01'
 
-                
-                date_part = data.get('days', [{}])[0].get('datetime', None)  
-                time_part = current_data.get('datetime', None)  
-                
-                if date_part and time_part:
-                    full_datetime_str = f"{date_part} {time_part}"
-                    full_datetime = datetime.strptime(full_datetime_str, "%Y-%m-%d %H:%M:%S")
+                if date_str:
+                    date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
+
+                    # Cek apakah data ini sudah ada
+                    if not WeatherData.objects.filter(station=station, date=date_obj).exists():
+                        weather = WeatherData.objects.create(
+                            station=station,
+                            date=date_obj,
+                            temperature=current.get('temp'),
+                            humidity=current.get('humidity'),
+                            wind_speed=current.get('windspeed'),
+                            precipitation=current.get('precip'),
+                            barometric_pressure=current.get('pressure')
+                        )
+
+                        results.append({
+                            "station": name,
+                            "date": date_obj,
+                            "temperature": weather.temperature,
+                            "humidity": weather.humidity,
+                            "wind_speed": weather.wind_speed,
+                            "precipitation": weather.precipitation,
+                            "barometric_pressure": weather.barometric_pressure
+                        })
+                    else:
+                        results.append({
+                            "station": name,
+                            "status": "Skipped - already exists"
+                        })
                 else:
-                    full_datetime = None  
-
-                
-                temperature = current_data.get('temp', None)
-                humidity = current_data.get('humidity', None)
-                wind_speed = current_data.get('windspeed', None)
-                precipitation = current_data.get('precip', None)
-                barometric_pressure = current_data.get('pressure', None)
-
-               
-                weather_entry = WeatherData.objects.create(
-                    name_location=nama,
-                    geom=Point(lon, lat),  
-                    datetime=full_datetime,
-                    temperature=temperature,
-                    humidity=humidity,
-                    wind_speed=wind_speed,
-                    precipitation=precipitation,
-                    barometric_pressure=barometric_pressure
-                )
-
-                results.append({
-                    "name_location": nama,
-                    "geom": {"type": "Point", "coordinates": [lon, lat]},
-                    "datetime": full_datetime,
-                    "temperature": temperature,
-                    "humidity": humidity,
-                    "wind_speed": wind_speed,
-                    "precipitation": precipitation,
-                    "barometric_pressure": barometric_pressure
-                })
+                    results.append({
+                        "station": name,
+                        "status": "Missing date"
+                    })
             else:
                 results.append({
-                    "name_location": nama,
-                    "geom": {"type": "Point", "coordinates": [lon, lat]},
-                    "error": f"Failed to fetch data: {response.status_code}"
+                    "station": name,
+                    "error": f"Failed to fetch: {response.status_code}"
                 })
 
         return Response(results, status=status.HTTP_200_OK)
@@ -87,4 +88,32 @@ class WeatherDataListView(APIView):
     def get(self, request):
         weather_data = WeatherData.objects.all()
         serializer = WeatherDataSerializer(weather_data, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+class LatestPM25ActualView(APIView):
+    def get(self, request):
+        latest_data = (
+            pm25DataActual.objects
+            .order_by('-id')  # atau gunakan '-pk' jika tidak ada timestamp
+            .distinct('station')
+        )
+        serializer = pm25DataActualSerializer(latest_data, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class LatestPM25PredictionView(APIView):
+    def get(self, request):
+        latest_by_station = []
+        stations = set(pm25DataPrediction.objects.values_list('station_id', flat=True))
+        for station_id in stations:
+            latest = (
+                pm25DataPrediction.objects
+                .filter(station_id=station_id)
+                .order_by('-date')
+                .first()
+            )
+            if latest:
+                latest_by_station.append(latest)
+
+        serializer = pm25DataPredictionSerializer(latest_by_station, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
