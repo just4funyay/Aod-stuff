@@ -15,6 +15,7 @@ from io import BytesIO
 import psycopg2
 from django.utils.timezone import now
 from .serializers import RasterDataSerializer
+from rasterio.transform import from_origin
 
 
 class InputDatabase(APIView):
@@ -61,11 +62,11 @@ class InputDatabase(APIView):
 
                                 # Proses data VIIRS
                                 for i in range(latitude.shape[0]):
-                                    for j in range(longitude.shape[1]):  # Memperbaiki akses dimensi longitude
+                                    for j in range(latitude.shape[1]):  # Memperbaiki akses dimensi longitude
                                         # Mengambil elemen tunggal dari array untuk latitude, longitude, dan aod_values
-                                        lat_value = float(latitude[i, j]) if latitude.ndim == 2 else float(latitude[i])
-                                        lon_value = float(longitude[i, j]) if longitude.ndim == 2 else float(longitude[i])
-                                        aod_value = float(aod_values[i, j]) if aod_values.ndim == 2 else float(aod_values[i])
+                                        lat_value = float(latitude[i, j])
+                                        lon_value = float(longitude[i, j])
+                                        aod_value = float(aod_values[i, j])
 
                                         dataraster.append({
                                             "latitude": lat_value,
@@ -112,9 +113,9 @@ class InputDatabase(APIView):
                                 for i in range(latitude.shape[0]):
                                     for j in range(longitude.shape[0]):  # Memperbaiki akses dimensi longitude
                                         # Mengambil elemen tunggal dari array untuk latitude, longitude, dan aod_values
-                                        lat_value = float(latitude[i, j]) if latitude.ndim == 2 else float(latitude[i])
-                                        lon_value = float(longitude[i, j]) if longitude.ndim == 2 else float(longitude[i])
-                                        aod_value = float(aod_values[i, j]) if aod_values.ndim == 2 else float(aod_values[i])
+                                        lat_value =  float(latitude[i])
+                                        lon_value =  float(longitude[j])
+                                        aod_value = float(aod_values[i, j])
 
                                         dataraster.append({
                                             "latitude": lat_value,
@@ -159,26 +160,34 @@ class GetRasterDataView(APIView):
         try:
             raster_data = RasterData.objects.latest('pk')
             gdal_raster = raster_data.raster
-            file_buffer = BytesIO()
-            transform = rasterio.transform.from_origin(
-                gdal_raster.origin.x, gdal_raster.origin.y, gdal_raster.scale.x, gdal_raster.scale.y
-            )
 
-            with rasterio.open(
-                file_buffer, 'w',
-                driver='GTiff',
-                width=gdal_raster.width,
-                height=gdal_raster.height,
-                count=1,
-                dtype=gdal_raster.bands[0].data().dtype.name,
-                crs=gdal_raster.srs.wkt,
-                transform=transform
-            ) as dst:
-                dst.write(gdal_raster.bands[0].data(), 1)
+            # Buat MemoryFile untuk menyimpan raster ke dalam memori
+            with rasterio.MemoryFile() as memfile:
+                transform = from_origin(
+                    gdal_raster.origin.x, gdal_raster.origin.y,
+                    gdal_raster.scale.x, gdal_raster.scale.y
+                )
 
+                with memfile.open(
+                    driver='GTiff',
+                    width=gdal_raster.width,
+                    height=gdal_raster.height,
+                    count=1,
+                    dtype=gdal_raster.bands[0].data().dtype.name,
+                    crs=gdal_raster.srs.wkt,
+                    transform=transform
+                ) as dst:
+                    dst.write(gdal_raster.bands[0].data(), 1)
+
+                # Memindahkan file ke dalam BytesIO untuk dikirimkan ke klien
+                file_buffer = BytesIO(memfile.read())
+
+            # Kembali ke posisi awal buffer setelah dibaca
             file_buffer.seek(0)
-            response = HttpResponse(file_buffer, content_type='image/tiff')
-            response['Content-Disposition'] = 'attachment; filename="raster_latest.tif"'
+
+            response = FileResponse(file_buffer, content_type='image/tiff')
+            response['Content-Disposition'] = 'inline; filename="raster_latest.tif"'
+            response["Access-Control-Allow-Origin"] = "*"
 
             return response
 

@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-#cd(y%t$igii_x2vbsdrf=h#kv*&e#r6l-tg+jqy13y98j9@4t
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["*"]
 
 
 # Application definition
@@ -144,9 +144,9 @@ REST_FRAMEWORK = {
 
 
 CRONJOBS = [
-    ('* * * * *', 'Aod_data.retrieve_aod.retrieve_viirs_data'),
+    ('0 * * * *', 'Aod_data.retrieve_aod.retrieve_viirs_data'),
     #('* * * * *', 'Weather_data.cron.fetch_weather_data'),
-    ('* * * * *', 'Aod_data.get-data-himawari.getDataHimawari'),
+    ('0 * * * *', 'Aod_data.getDataHimawari.getDataHimawari'),
 ]
 
 import os
@@ -154,4 +154,4 @@ import os
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 MEDIA_URL = '/media/'
 
-CORS_ORIGIN_ALLOW_ALL = True
+CORS_ALLOW_ALL_ORIGINS = True
