@@ -16,3 +16,8 @@ class RasterData(models.Model):
 
     def __str__(self):
         return f"{self.sattellite.sattelite_name} - {self.time_retrieve}"
+
+class pm25DataEstimate(models.Model):
+    aodid = models.ForeignKey(RasterData, on_delete=models.CASCADE, related_name='pm25data_estimate')
+    valuepm25 = models.JSONField()
+    time = models.DateField()

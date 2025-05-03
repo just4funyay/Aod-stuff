@@ -14,15 +14,15 @@ def convert_to_geoTiFF_input_data(nc_file_path, geotiff_file_path):
     # logic Viirs
     folder_name = os.path.basename(os.path.dirname(nc_file_path))
     if folder_name == 'VIIRS':
-        # Ambil variabel data
+        
         latitude = ds['Latitude'].values
         longitude = ds['Longitude'].values
         aod = ds['Aerosol_Optical_Thickness_550_Land_Ocean_Best_Estimate'].values
 
-        # Ganti NaN dengan 0 untuk validasi nilai AOD
+        
         aod_valid = np.where(np.isnan(aod), -9999, aod)
 
-        # Mask untuk memilih data dalam batas region
+        
         lat_min, lat_max, lon_min, lon_max = -6.5, -6.08, 106.6, 107.0
         mask_region = (latitude >= lat_min) & (latitude <= lat_max) & (longitude >= lon_min) & (longitude <= lon_max)
         aod_filtered = np.full(aod.shape, 0, dtype=np.float32)
@@ -49,36 +49,34 @@ def convert_to_geoTiFF_input_data(nc_file_path, geotiff_file_path):
             dst.write(aod, 1)
 
     elif folder_name == 'Himawari':
-        # 1. Buka file
         ds = xr.open_dataset(nc_file_path, decode_timedelta=False)
 
-        # 2. Tentukan batas Jakarta
+        # batas Jakarta
         lat_min, lat_max, lon_min, lon_max = -6.5, -6.08, 106.6, 107.0
 
-        # 3. Ambil nama koordinat latitude dan longitude
+        # Ambil nama koordinat latitude dan longitude
         lon_name = 'longitude'  # Berdasarkan struktur dataset Anda
         lat_name = 'latitude'   # Berdasarkan struktur dataset Anda
 
-        # 4. Subset data Jakarta
+        # Subset data Jakarta
         jakarta_data = ds.sel(
-            latitude=slice(lat_max, lat_min),  # Ambil data antara lat_max dan lat_min
-            longitude=slice(lon_min, lon_max)  # Ambil data antara lon_min dan lon_max
+            latitude=slice(lat_max, lat_min),  
+            longitude=slice(lon_min, lon_max)  
         )
 
-        # 5. Ambil data AOT
+        # Ambil data AOT
         if 'AOT_L2_Mean' not in jakarta_data:
             raise ValueError("Data AOT_L2_Mean tidak ditemukan dalam file.")
 
         aod = jakarta_data['AOT_L2_Mean']
 
-        # 6. Ambil latitude dan longitude dari data Jakarta
-        latitude = jakarta_data[lat_name].values  # Ambil array latitude
-        longitude = jakarta_data[lon_name].values  # Ambil array longitude
-
-        # 7. Assign CRS ke DataArray
+        
+        latitude = jakarta_data[lat_name].values  
+        longitude = jakarta_data[lon_name].values 
+        
         aod = aod.rio.write_crs("EPSG:4326") 
 
-        # 8. Simpan jadi GeoTIFF
+        
         tiff_output_path = os.path.join(geotiff_file_path)
         aod.rio.to_raster(tiff_output_path)
 

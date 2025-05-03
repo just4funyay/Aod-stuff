@@ -188,6 +188,7 @@ class GetRasterDataView(APIView):
             response = FileResponse(file_buffer, content_type='image/tiff')
             response['Content-Disposition'] = 'inline; filename="raster_latest.tif"'
             response["Access-Control-Allow-Origin"] = "*"
+            response["X-Message"] = "Berhasil mengambil data raster terbaru."
 
             return response
 
