@@ -4,7 +4,7 @@ from rest_framework import status
 import os
 from django.conf import settings
 from .utils import convert_to_geoTiFF_input_data
-from .models import RasterData, Sattellite 
+from .models import RasterData, Sattellite, pm25DataEstimate
 from django.contrib.gis.gdal import GDALRaster
 from datetime import date
 import gc
@@ -14,8 +14,10 @@ import rasterio
 from io import BytesIO
 import psycopg2
 from django.utils.timezone import now
-from .serializers import RasterDataSerializer
+from .serializers import RasterDataSerializer,pm25DataEstimateSerializer
 from rasterio.transform import from_origin
+import numpy as np
+import tempfile
 
 
 class InputDatabase(APIView):
@@ -36,17 +38,17 @@ class InputDatabase(APIView):
         processed_files = []
         errors = []
 
-        # Pisahkan pemrosesan untuk VIIRS
+        
         for satellite_folder_name in os.listdir(base_nc_folder_path):
             satellite_folder_path = os.path.join(base_nc_folder_path, satellite_folder_name)
 
             if not os.path.isdir(satellite_folder_path):
-                continue  # Skip kalau bukan folder
+                continue  
 
             try:
                 sattellite, _ = Sattellite.objects.get_or_create(sattelite_name=satellite_folder_name)
 
-                # Hanya untuk VIIRS
+                
                 if "VIIRS" in satellite_folder_name:
                     for nc_file_name in os.listdir(satellite_folder_path):
                         if nc_file_name.endswith('.nc'):
@@ -60,10 +62,10 @@ class InputDatabase(APIView):
                                 
                                 dataraster = []
 
-                                # Proses data VIIRS
+                               
                                 for i in range(latitude.shape[0]):
-                                    for j in range(latitude.shape[1]):  # Memperbaiki akses dimensi longitude
-                                        # Mengambil elemen tunggal dari array untuk latitude, longitude, dan aod_values
+                                    for j in range(latitude.shape[1]):  
+                                        
                                         lat_value = float(latitude[i, j])
                                         lon_value = float(longitude[i, j])
                                         aod_value = float(aod_values[i, j])
@@ -95,7 +97,7 @@ class InputDatabase(APIView):
                             except Exception as e:
                                 errors.append({f"{satellite_folder_name}/{nc_file_name}": str(e)})
 
-                # Pemrosesan untuk Himawari
+                
                 elif "Himawari" in satellite_folder_name:
                     for nc_file_name in os.listdir(satellite_folder_path):
                         if nc_file_name.endswith('.nc'):
@@ -109,10 +111,10 @@ class InputDatabase(APIView):
 
                                 dataraster = []
 
-                                # Proses data Himawari
+                                
                                 for i in range(latitude.shape[0]):
-                                    for j in range(longitude.shape[0]):  # Memperbaiki akses dimensi longitude
-                                        # Mengambil elemen tunggal dari array untuk latitude, longitude, dan aod_values
+                                    for j in range(longitude.shape[0]):  
+                                        
                                         lat_value =  float(latitude[i])
                                         lon_value =  float(longitude[j])
                                         aod_value = float(aod_values[i, j])
@@ -161,7 +163,7 @@ class GetRasterDataView(APIView):
             raster_data = RasterData.objects.latest('pk')
             gdal_raster = raster_data.raster
 
-            # Buat MemoryFile untuk menyimpan raster ke dalam memori
+            
             with rasterio.MemoryFile() as memfile:
                 transform = from_origin(
                     gdal_raster.origin.x, gdal_raster.origin.y,
@@ -179,10 +181,9 @@ class GetRasterDataView(APIView):
                 ) as dst:
                     dst.write(gdal_raster.bands[0].data(), 1)
 
-                # Memindahkan file ke dalam BytesIO untuk dikirimkan ke klien
+                
                 file_buffer = BytesIO(memfile.read())
 
-            # Kembali ke posisi awal buffer setelah dibaca
             file_buffer.seek(0)
 
             response = FileResponse(file_buffer, content_type='image/tiff')
@@ -196,3 +197,41 @@ class GetRasterDataView(APIView):
             return HttpResponse("Data raster tidak ditemukan.", status=404)
         except Exception as e:
             return HttpResponse(f"Error: {str(e)}", status=500)
+        
+class PM25GeoTIFFLatestDownloadView(APIView):
+    def get(self, request):
+        try:
+            # Ambil data PM2.5 terbaru
+            pm25 = pm25DataEstimate.objects.latest('pk')
+
+            # Ambil raster AOD terkait
+            gdal_raster = GDALRaster(pm25.aodid.raster)
+
+            # Ambil metadata dari objek GDALRaster
+            width = gdal_raster.width
+            height = gdal_raster.height
+            transform = gdal_raster.geotransform
+            crs = gdal_raster.srs.wkt
+
+            # Konversi data PM2.5 menjadi array NumPy
+            array_pm25 = np.array(pm25.valuepm25, dtype=np.float32)
+
+            # Pastikan dimensi array PM2.5 cocok dengan dimensi raster AOD
+            if array_pm25.shape != (height, width):
+                return Response({
+                    "error": f"Shape mismatch: got {array_pm25.shape}, expected ({height}, {width})"
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Siapkan file TIFF sementara untuk PM2.5
+            with tempfile.NamedTemporaryFile(suffix='.tif', delete=False) as tmpfile:
+                with rasterio.open(tmpfile.name, 'w', driver='GTiff', height=height, width=width,
+                                   count=1, dtype='float32', crs=crs, transform=transform) as dst:
+                    dst.write(array_pm25, 1)
+
+                # Return the file as an HTTP response
+                return FileResponse(open(tmpfile.name, 'rb'), as_attachment=True, filename='pm25_latest.tif')
+
+        except pm25DataEstimate.DoesNotExist:
+            return Response({"error": "No PM2.5 data found."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
