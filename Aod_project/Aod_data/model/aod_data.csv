@@ -1,4 +1,4 @@
-datetime,aod_longitude,aod_latitude,station_longitude,station_latitude,AOD,tempmax,tempmin,temp,feelslikemax,feelslikemin,feelslike,dew,humidity,precip,precipcover,windgust,windspeed,winddir,sealevelpressure,cloudcover,visibilty,solarradiation,solarenery,uvindex
+datetime,aod_longitude,aod_latitude,station_longitude,station_latitude,AOD,tempmax,tempmin,temp,feelslikemax,feelslikemin,feelslike,dew,humidity,precip,precipcover,windgust,windspeed,winddir,sealevelpressure,cloudcover,visibility,solarradiation,solarenergy,uvindex
 2025-05-03,106.5999984741211,-6.099998474121094,106.7525,-6.20737,0.9751999974250793,33.4,25.0,28.9,40.5,25.0,32.6,24.1,76.1,4.3,33.33,14.0,19.1,46.2,,55.2,11.4,252.7,21.8,9.0
 2025-05-03,106.6500015258789,-6.099998474121094,106.7525,-6.20737,0.7057999968528748,33.4,25.0,28.9,40.5,25.0,32.6,24.1,76.1,4.3,33.33,14.0,19.1,46.2,,55.2,11.4,252.7,21.8,9.0
 2025-05-03,106.69999694824219,-6.099998474121094,106.7525,-6.20737,0.63919997215271,33.4,25.0,28.9,40.5,25.0,32.6,24.1,76.1,4.3,33.33,14.0,19.1,46.2,,55.2,11.4,252.7,21.8,9.0
