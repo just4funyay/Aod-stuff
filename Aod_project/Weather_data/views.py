@@ -142,3 +142,26 @@ class LatestPM25PredictionView(APIView):
 
         serializer = pm25DataPredictionSerializer(latest_by_station, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+class AddWeatherStations(APIView):
+    def get(self, request, *args, **kwargs):
+        locations = {
+            'us_embassy_1': (-6.1811056, 106.8279877),
+            'us_embassy_2': (-6.236658728205383, 106.79319751533286),
+            'jakarta_gbk': (-6.2155, 106.803),
+            'bundaran_hi': (-6.19466, 106.8235),
+            'kelapa_gading': (-6.1535777, 106.910887),
+            'jagakarsa': (-6.35693, 106.80367),
+            'lubang_buaya': (-6.28889, 106.90919),
+            'kebun_jeruk': (-6.20737, 106.7525)
+        }
+
+        # Menambahkan stasiun cuaca
+        for station_name, coords in locations.items():
+            lat, lon = coords
+            point = Point(lon, lat)  
+
+            # Menyimpan data ke model WeatherStation
+            WeatherStation.objects.create(name=station_name, location=point)
+
+        return Response({"message": "Weather stations added successfully!"}, status=status.HTTP_201_CREATED)
