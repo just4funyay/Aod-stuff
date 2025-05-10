@@ -9,76 +9,54 @@ import rioxarray
 #NC file -> TIFF file
 
 def convert_to_geoTiFF_input_data(nc_file_path, geotiff_file_path):
-    ds = xr.open_dataset(nc_file_path,decode_timedelta=False)
-
-    # logic Viirs
+    ds = xr.open_dataset(nc_file_path, decode_timedelta=False)
     folder_name = os.path.basename(os.path.dirname(nc_file_path))
+
+    # Batas wilayah Jakarta
+    lat_min, lat_max = -6.5, -6.08
+    lon_min, lon_max = 106.6, 107.0
+
     if folder_name == 'VIIRS':
-        
-        latitude = ds['Latitude'].values
-        longitude = ds['Longitude'].values
-        aod = ds['Aerosol_Optical_Thickness_550_Land_Ocean_Best_Estimate'].values
+        # Ambil data koordinat dan AOD
+        lat = ds['Latitude']
+        lon = ds['Longitude']
+        aod = ds['Aerosol_Optical_Thickness_550_Land_Ocean_Best_Estimate']
 
-        
-        aod_valid = np.where(np.isnan(aod), -9999, aod)
-
-        
-        lat_min, lat_max, lon_min, lon_max = -6.5, -6.08, 106.6, 107.0
-        mask_region = (latitude >= lat_min) & (latitude <= lat_max) & (longitude >= lon_min) & (longitude <= lon_max)
-        aod_filtered = np.full(aod.shape, 0, dtype=np.float32)
-        aod_filtered[mask_region] = aod_valid[mask_region]
-
-        
-        # Pastikan bounding box sesuai transform
-        transform_region = from_bounds(
-            longitude.min(), latitude.min(),  # xmin, ymin
-            longitude.max(), latitude.max(),  # xmax, ymax
-            longitude.shape[1], latitude.shape[0]
+        # Masking wilayah Jakarta
+        mask = (
+            (lat >= lat_min) & (lat <= lat_max) &
+            (lon >= lon_min) & (lon <= lon_max)
         )
-        aod = np.flipud(aod_filtered)
-        aod = np.fliplr(aod)
+        aod_filtered = aod.where(mask)
+        aod_filtered = aod_filtered.fillna(-9999)
 
-        # Simpan ke GeoTIFF
-        with rasterio.open(
-            geotiff_file_path, 'w', driver='GTiff',
-            height=latitude.shape[0], width=longitude.shape[1],
-            count=1, dtype=rasterio.float32,
-            crs="EPSG:4326", transform=transform_region,
-            nodata=0
-        ) as dst:
-            dst.write(aod, 1)
+        # Set koordinat eksplisit agar bisa diubah ke raster
+        aod_filtered.coords['latitude'] = (('y', 'x'), lat.values)
+        aod_filtered.coords['longitude'] = (('y', 'x'), lon.values)
+
+        # Tulis CRS dan simpan sebagai GeoTIFF
+        aod_filtered = aod_filtered.rio.write_crs("EPSG:4326", inplace=False)
+        aod_filtered.rio.to_raster(geotiff_file_path)
+
+        return lat.values, lon.values, aod_filtered
 
     elif folder_name == 'Himawari':
-        ds = xr.open_dataset(nc_file_path, decode_timedelta=False)
-
-        # batas Jakarta
-        lat_min, lat_max, lon_min, lon_max = -6.5, -6.08, 106.6, 107.0
-
-        # Ambil nama koordinat latitude dan longitude
-        lon_name = 'longitude'  # Berdasarkan struktur dataset Anda
-        lat_name = 'latitude'   # Berdasarkan struktur dataset Anda
-
         # Subset data Jakarta
-        jakarta_data = ds.sel(
-            latitude=slice(lat_max, lat_min),  
-            longitude=slice(lon_min, lon_max)  
+        ds_subset = ds.sel(
+            latitude=slice(lat_max, lat_min),
+            longitude=slice(lon_min, lon_max)
         )
 
-        # Ambil data AOT
-        if 'AOT_L2_Mean' not in jakarta_data:
-            raise ValueError("Data AOT_L2_Mean tidak ditemukan dalam file.")
+        if 'AOT_L2_Mean' not in ds_subset:
+            raise ValueError("Data 'AOT_L2_Mean' tidak ditemukan dalam file.")
 
-        aod = jakarta_data['AOT_L2_Mean']
+        aod = ds_subset['AOT_L2_Mean']
+        aod = aod.rio.write_crs("EPSG:4326")
 
-        
-        latitude = jakarta_data[lat_name].values  
-        longitude = jakarta_data[lon_name].values 
-        
-        aod = aod.rio.write_crs("EPSG:4326") 
+        # Simpan sebagai GeoTIFF
+        aod.rio.to_raster(geotiff_file_path)
 
-        
-        tiff_output_path = os.path.join(geotiff_file_path)
-        aod.rio.to_raster(tiff_output_path)
+        return ds_subset['latitude'].values, ds_subset['longitude'].values, aod
 
-    return latitude,longitude,aod
-
+    else:
+        raise ValueError(f"Folder '{folder_name}' tidak dikenali sebagai 'VIIRS' atau 'Himawari'.")

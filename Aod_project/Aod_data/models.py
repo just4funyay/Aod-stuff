@@ -20,4 +20,5 @@ class RasterData(models.Model):
 class pm25DataEstimate(models.Model):
     aodid = models.ForeignKey(RasterData, on_delete=models.CASCADE, related_name='pm25data_estimate')
     valuepm25 = models.JSONField()
+    raster = models.RasterField(null=True, blank=True)
     time = models.DateField()
