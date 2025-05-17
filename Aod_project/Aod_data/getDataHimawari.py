@@ -2,6 +2,7 @@ from ftplib import FTP
 from datetime import datetime
 import os
 import requests
+from Aod_data.utils import process_himawari_data
 
 def getDataHimawari():
     ftpUser = "mahamaha_apps.ipb.ac.id"
@@ -24,8 +25,7 @@ def getDataHimawari():
         print(f"Isi folder {dirData}:")
         
         for file_name, _ in files:
-            print(file_name)  # Hanya nama file yang dicetak
-
+            print(file_name)  
         lastestFile = files[-1][0]
         local_file_path = os.path.join(download_path, lastestFile)
         if lastestFile.endswith('.nc'):
@@ -36,14 +36,8 @@ def getDataHimawari():
     except Exception as e:
         print(f"Gagal mengakses {dirData}: {e}")
     ftp.quit()
-    response = requests.get("http://localhost:8000/api1/inpudatabase/", json={
-    "filename": lastestFile
-    })
-
-    print("Status proses API:", response.status_code)
-    print("Response:", response.text)
-
-    print(local_file_path)
+    check = process_himawari_data()
+    print(check)
 
 
 

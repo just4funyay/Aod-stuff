@@ -2,6 +2,8 @@ import numpy as np
 import xarray as xr
 import rasterio
 from rasterio.transform import from_origin
+import geopandas as gpd
+from shapely.geometry import box
 
 def csv_to_geotiff(dataframe, output_path):
     # Ambil kolom latitude, longitude, dan PM2.5
@@ -13,16 +15,16 @@ def csv_to_geotiff(dataframe, output_path):
     latitudes_unique = np.unique(latitudes)[::-1]
     longitudes_unique = np.unique(longitudes)
 
-    # Buat grid kosong
+    
     pm25_grid = np.full((len(latitudes_unique), len(longitudes_unique)), np.nan)
 
-    # Isi grid
+    
     for lat, lon, pm25 in zip(latitudes, longitudes, pm25_values):
         lat_idx = np.where(latitudes_unique == lat)[0][0]
         lon_idx = np.where(longitudes_unique == lon)[0][0]
         pm25_grid[lat_idx, lon_idx] = pm25
 
-    # Buat DataArray
+    
     data_array = xr.DataArray(
         pm25_grid,
         coords={
@@ -32,11 +34,11 @@ def csv_to_geotiff(dataframe, output_path):
         dims=['latitude', 'longitude']
     )
 
-    # Hitung resolusi grid
+    
     res_lat = abs(latitudes_unique[1] - latitudes_unique[0])
     res_lon = abs(longitudes_unique[1] - longitudes_unique[0])
 
-    # Transformasi raster
+    
     transform = from_origin(
         west=longitudes_unique.min(),
         north=latitudes_unique.max(),
@@ -58,5 +60,31 @@ def csv_to_geotiff(dataframe, output_path):
     ) as dst:
         dst.write(pm25_grid, 1)
 
-    print(f"✅ GeoTIFF berhasil disimpan ke: {output_path}")
+    print(f"GeoTIFF berhasil disimpan ke: {output_path}")
     return output_path
+
+# csv -> polygon
+def csvToPolygon(dataframe, jakarta_geojson):
+    lat_res = 0.05
+    lon_res = 0.05
+    records = []
+    for _,row in dataframe.iterrows():
+        lat = row["aod_latitude"]
+        lon = row["aod_longitude"]
+        pm25 = row["PM2.5"]
+        
+        grid_cell = box(
+            lon - lon_res / 2, lat - lat_res / 2,
+            lon + lon_res / 2, lat + lat_res / 2
+        )
+        records.append({
+        'geometry': grid_cell,
+        'pm25': pm25
+    })
+    jakarta = gpd.read_file(jakarta_geojson)    
+    gdf = gpd.GeoDataFrame(records, crs="EPSG:4326")
+    clipped_gdf = gpd.clip(gdf, jakarta)
+    print(clipped_gdf)
+
+    return clipped_gdf
+    # disini

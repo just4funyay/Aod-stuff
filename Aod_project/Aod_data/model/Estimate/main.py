@@ -5,111 +5,127 @@ import pandas as pd
 import csv
 import joblib
 from predict import predict_model
-from csvToRaster import csv_to_geotiff
+from csvToRaster import csv_to_geotiff,csvToPolygon
 
+# Setup Django environment
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
 sys.path.append(PROJECT_ROOT)
-
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "Aod_project.settings")
 django.setup()
 
-from Aod_data.models import RasterData
+
+from Aod_data.models import RasterData, pm25DataEstimate, PolygondataPM25
 from Weather_data.models import WeatherData
-from Aod_data.models import pm25DataEstimate
 from django.contrib.gis.gdal import GDALRaster
-
-rasterdata = RasterData.objects.latest('pk')
-aod_value = rasterdata.data
-aod_date = rasterdata.time_retrieve
-weather_on_date = WeatherData.objects.filter(date=aod_date)
-
-print(rasterdata.id)
-
-merged_rows = []
-
-for aod in aod_value:
-    aod_longitude = aod['longitude']
-    aod_latitude = aod['latitude']
-    aod_value = aod['aod_values']
-
-    for weather_data in weather_on_date:
-
-        station_longitude = weather_data.station.location.x
-        station_latitude = weather_data.station.location.y
-        station_temperature = weather_data.temperature
-        station_humidity = weather_data.humidity
-        station_windspeed = weather_data.wind_speed
-        station_precipitation = weather_data.precipitation
-        station_barometicPressure = weather_data.barometric_pressure
-        station_tempMax = weather_data.temp_max
-        station_tempMin = weather_data.temp_min
-        station_feelsLikeMax = weather_data.feels_like_max
-        station_feelsLikeMin = weather_data.feels_like_min
-        station_feelsLike = weather_data.feels_like
-        station_dewPoint = weather_data.dew_point
-        station_windGust = weather_data.wind_gust
-        station_cloudCover = weather_data.cloud_cover
-        station_uvIndex = weather_data.uv_index
-        station_solarRadiation = weather_data.solar_radiation
-        station_solarEnergy = weather_data.solar_energy
-        station_precipCover = weather_data.precip_cover
-        station_windDir = weather_data.wind_dir
-        station_seaLevelPressure = weather_data.sea_level_pressure
-        station_visibility = weather_data.visibility
-
-    
-
-    merged_rows.append({
-        'datetime': aod_date,
-        'aod_longitude': aod_longitude,
-        'aod_latitude': aod_latitude,
-        'station_longitude': station_longitude,
-        'station_latitude': station_latitude,
-        'AOD': aod_value,
-        'tempmax': station_tempMax,
-        'tempmin': station_tempMin,
-        'temp':station_temperature,
-        'feelslikemax': station_feelsLikeMax,
-        'feelslikemin': station_feelsLikeMin,
-        'feelslike': station_feelsLike,
-        'dew': station_dewPoint,
-        'humidity': station_humidity,
-        'precip': station_precipitation,
-        'precipcover': station_precipCover,
-        'windgust': station_windGust,
-        'windspeed': station_windspeed,
-        'winddir': station_windDir,
-        'sealevelpressure': station_seaLevelPressure,
-        'cloudcover': station_cloudCover,
-        'visibility': station_visibility,
-        'solarradiation': station_solarRadiation,
-        'solarenergy': station_solarEnergy,
-        'uvindex': station_uvIndex,
-    })
+from django.conf import settings
+from django.contrib.gis.geos import GEOSGeometry
 
 folderpath = 'Aod_data/model/Estimate'
-file_name = os.path.join(folderpath, 'aod_data.csv')
-fieldnames = merged_rows[0].keys()
-with open(file_name, mode='w', newline='') as file:
-    writer = csv.DictWriter(file, fieldnames=fieldnames)
-    
-    writer.writeheader()
-    
-    writer.writerows(merged_rows)
+os.makedirs(folderpath, exist_ok=True)
 
-print(f'Data AOD berhasil disimpan ke dalam file {file_name}')
+def estimatePm25():
+    rasterdata_all = RasterData.objects.all()
 
-df = predict_model(file_name)
+    for rasterdata in rasterdata_all:
+        aod_value = rasterdata.data
+        aod_date = rasterdata.time_retrieve
 
-tiff_file = csv_to_geotiff(df,'Aod_data/model/Estimate/tes.tif')
+        # Cek apakah sudah diproses sebelumnya
+        if pm25DataEstimate.objects.filter(aodid=rasterdata).exists():
+            print(f"[SKIP] Data PM2.5 untuk RasterData ID {rasterdata.id} sudah ada.")
+            continue
 
-data = df.to_dict(orient="records")
+        weather_on_date = WeatherData.objects.filter(date=aod_date)
+        if not weather_on_date.exists():
+            print(f"[WARNING] Tidak ada data cuaca untuk tanggal {aod_date}, lewati ID {rasterdata.id}.")
+            continue
 
-raster = GDALRaster(tiff_file, write=True)
+        merged_rows = []
 
-pm25data = pm25DataEstimate.objects.create(
-    aodid=rasterdata,
-    valuepm25 = data,
-    raster = raster,
-    time=aod_date
-)
+        for aod in aod_value:
+            aod_longitude = aod['longitude']
+            aod_latitude = aod['latitude']
+            aod_val = aod['aod_values']
+
+            for weather_data in weather_on_date:
+                merged_rows.append({
+                    'datetime': aod_date,
+                    'aod_longitude': aod_longitude,
+                    'aod_latitude': aod_latitude,
+                    'station_longitude': weather_data.station.location.x,
+                    'station_latitude': weather_data.station.location.y,
+                    'AOD': aod_val,
+                    'tempmax': weather_data.temp_max,
+                    'tempmin': weather_data.temp_min,
+                    'temp': weather_data.temperature,
+                    'feelslikemax': weather_data.feels_like_max,
+                    'feelslikemin': weather_data.feels_like_min,
+                    'feelslike': weather_data.feels_like,
+                    'dew': weather_data.dew_point,
+                    'humidity': weather_data.humidity,
+                    'precip': weather_data.precipitation,
+                    'precipcover': weather_data.precip_cover,
+                    'windgust': weather_data.wind_gust,
+                    'windspeed': weather_data.wind_speed,
+                    'winddir': weather_data.wind_dir,
+                    'sealevelpressure': weather_data.sea_level_pressure,
+                    'cloudcover': weather_data.cloud_cover,
+                    'visibility': weather_data.visibility,
+                    'solarradiation': weather_data.solar_radiation,
+                    'solarenergy': weather_data.solar_energy,
+                    'uvindex': weather_data.uv_index,
+                })
+
+        if not merged_rows:
+            print(f"[WARNING] Tidak ada data gabungan untuk ID {rasterdata.id}, lewati.")
+            continue
+
+        # Simpan ke CSV
+        file_name = os.path.join(folderpath, f'aod_data_{rasterdata.id}.csv')
+        with open(file_name, mode='w', newline='') as file:
+            writer = csv.DictWriter(file, fieldnames=merged_rows[0].keys())
+            writer.writeheader()
+            writer.writerows(merged_rows)
+
+        print(f"[INFO] Data AOD ID {rasterdata.id} disimpan ke {file_name}")
+
+        
+        df = predict_model(file_name)
+        
+        tiff_file = os.path.join(folderpath, f'predicted_{rasterdata.id}.tif')
+        # diganti csv to polygon
+        #tiff_file = csv_to_geotiff(df, tiff_file) 
+
+        #raster = GDALRaster(tiff_file, write=True)
+        data = df.to_dict(orient="records")
+        jakarta_geojson = os.path.join(settings.BASE_DIR, 'id-jk.geojson')
+        polygondata = csvToPolygon(df, jakarta_geojson)
+        pm25data = pm25DataEstimate.objects.create(
+            aodid=rasterdata,
+            valuepm25=data,
+        #    raster=raster,
+            time=rasterdata.time_retrieve
+        )
+        for _, row in polygondata.iterrows():
+            geom = row.geometry
+            if geom.geom_type == 'MultiPolygon':
+                for poly in geom.geoms:
+                    polygon = GEOSGeometry(poly.wkt, srid=4326)
+                                    
+                    PolygondataPM25.objects.create(
+                        pm25id=pm25data,
+                        geom=polygon,
+                        pm25_value=row['pm25'],
+                        date=pm25data.time
+                    )
+            else:
+                polygon = GEOSGeometry(geom.wkt, srid=4326)
+                                
+                PolygondataPM25.objects.create(
+                    pm25id=pm25data,
+                    geom=polygon,
+                    pm25_value=row['pm25'],
+                    date=pm25data.time
+                )
+
+        print(f"[SUCCESS] Prediksi PM2.5 untuk ID {rasterdata.id} disimpan ke database.\n")
