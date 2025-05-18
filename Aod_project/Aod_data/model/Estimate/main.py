@@ -129,3 +129,12 @@ def estimatePm25():
                 )
 
         print(f"[SUCCESS] Prediksi PM2.5 untuk ID {rasterdata.id} disimpan ke database.\n")
+        file_name = os.path.join(folderpath, f'aod_data_{rasterdata.id}.csv')
+
+        if os.path.exists(file_name):
+            os.remove(file_name)
+            print(f"File {file_name} berhasil dihapus.")
+        else:
+            print(f"File {file_name} tidak ditemukan.")
+        
+estimatePm25()
