@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'django_crontab',
     'Weather_data',
     'django.contrib.postgres',
+    'drf_yasg',
 ]
 
 MIDDLEWARE = [
@@ -139,14 +140,17 @@ REST_FRAMEWORK = {
     # or allow read-only access for unauthenticated users.
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.AllowAny'
-    ]
+    ],
+    'UNICODE_JSON': False,
+    'STRICT_JSON': False,
 }
 
 
 CRONJOBS = [
     ('0 * * * *', 'Aod_data.retrieve_aod.retrieve_viirs_data'),
-    #('* * * * *', 'Weather_data.cron.fetch_weather_data'),
+    ('0 * * * *', 'Weather_data.cron.fetch_weather_data_range'),
     ('0 * * * *', 'Aod_data.getDataHimawari.getDataHimawari'),
+    ('0 * * * *', 'Weather_data.crawlingPm25.download_ispu_last_40_days'),
 ]
 
 import os

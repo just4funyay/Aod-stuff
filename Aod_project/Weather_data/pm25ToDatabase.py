@@ -20,7 +20,9 @@ def pm25ToDatabase(folder_path, kolom_nilai='ISPU PM2.5'):
                 parts = filename.split('_')
                 nama_stasiun = '_'.join(parts[:-1])
                 tanggal_str = parts[-1]
-                tanggal = datetime.strptime(tanggal_str, "%d%m%Y").date()
+                print(tanggal_str)
+                tanggal = datetime.strptime(tanggal_str, "%Y%m%d").date()
+                
 
                 full_path = os.path.join(folder_path, file)
                 df = pd.read_excel(full_path)
