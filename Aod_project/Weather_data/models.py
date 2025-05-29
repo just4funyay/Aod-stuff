@@ -34,7 +34,7 @@ class WeatherData(models.Model):
     
 class pm25DataActual(models.Model):
     station = models.ForeignKey(WeatherStation, on_delete=models.CASCADE, related_name='pm25data_actual')
-    datetime = models.DateTimeField(null=True, blank=True)
+    date = models.DateField(null=True, blank=True)
     pm25_value = models.FloatField(null=True, blank=True)
 
 class pm25DataPrediction(models.Model):
